@@ -1,0 +1,31 @@
+meta {
+  name: Підписка міжнародна email
+  type: http
+  seq: 9
+}
+
+post {
+  url: https://softpro.ua/api/cms-subscribtion
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/uk
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "яндекс-тест@почта.рф"
+  }
+}
+
+assert {
+  res.status: neq 500
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

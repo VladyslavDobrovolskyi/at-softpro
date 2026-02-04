@@ -1,0 +1,39 @@
+meta {
+  name: Відправка форми з невалідним номером телефону
+  type: http
+  seq: 3
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+}
+
+body:json {
+  {
+  "user_name":"Всеволод Гончаренко Владиславович",
+  "email":"vsevolod@gmial.com",
+  "phone":"400731828182",
+  "message_text":"Кря-кря 5"
+  }
+}
+
+assert {
+  res.body: neq "Звернення додано успішно"
+  res.status: neq 200
+}
+
+tests {
+  console.log("Response body: " + res.body);
+  req.body
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

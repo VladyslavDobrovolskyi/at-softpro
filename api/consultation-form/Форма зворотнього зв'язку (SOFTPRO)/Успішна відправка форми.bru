@@ -1,0 +1,39 @@
+meta {
+  name: Успішна відправка форми
+  type: http
+  seq: 2
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+}
+
+body:json {
+  {
+  "user_name":"Всеволод Гончаренко Владиславович",
+  "email":"vsevolod@gmial.com",
+  "phone":"380731828182",
+  "message_text":"Кря-кря 2"
+  }
+}
+
+assert {
+  res.body: eq "Звернення додано успішно"
+  res.status: eq 200
+}
+
+tests {
+  console.log("Response body: " + res.body);
+  req.body
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

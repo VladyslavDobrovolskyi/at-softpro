@@ -1,0 +1,31 @@
+meta {
+  name: Підписка з невалідним email
+  type: http
+  seq: 2
+}
+
+post {
+  url: https://softpro.ua/api/cms-subscribtion
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/uk
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "not-an-email"
+  }
+}
+
+assert {
+  res.status: neq 200
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

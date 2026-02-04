@@ -1,0 +1,38 @@
+meta {
+  name: Відправка форми без імені
+  type: http
+  seq: 7
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+}
+
+body:json {
+  {
+  "email":"no-name@example.com",
+  "phone":"380731828185",
+  "message_text":"Повідомлення без імені"
+  }
+}
+
+assert {
+  res.body: neq "Звернення додано успішно"
+  res.status: neq 200
+}
+
+tests {
+  console.log("Response body: " + res.body);
+  req.body
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

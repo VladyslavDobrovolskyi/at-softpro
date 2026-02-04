@@ -1,0 +1,44 @@
+meta {
+  name: Відправка форми з занадто довгим повідомленням
+  type: http
+  seq: 8
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+assert {
+  res.body: neq "Звернення додано успішно"
+  res.status: neq 200
+}
+
+script:pre-request {
+  const {messageGen} = require('./JavaScript/messageGen')
+  
+  req.body = {
+  "user_name": "Довге Повідомлення Довге" ,
+  "email":"longxname@example.com",
+  "phone":"380721828189",
+  "message_text": messageGen(800)
+  }
+  
+  
+}
+
+tests {
+  console.log("Response body length: " + (res.body || '').length);
+  req.body
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

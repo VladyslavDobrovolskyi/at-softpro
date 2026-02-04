@@ -1,0 +1,14 @@
+{
+	"servers": {
+		"@playwright/mcp": {
+			"command": "npx",
+			"args": ["@playwright/mcp@latest"],
+			"cwd": "${workspaceFolder}"
+		},
+		"@context7/mcp": {
+			"command": "npx",
+			"type": "stdio",
+			"args": ["-y", "@upstash/context7-mcp"]
+		}
+	}
+}

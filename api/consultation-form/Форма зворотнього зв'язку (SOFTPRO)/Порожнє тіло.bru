@@ -1,0 +1,35 @@
+meta {
+  name: Відправка форми з порожнім тілом
+  type: http
+  seq: 10
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+}
+
+body:json {
+  {  
+  }
+}
+
+assert {
+  res.body: neq "Звернення додано успішно"
+  res.status: neq 200
+}
+
+tests {
+  console.log("Response body: " + res.body);
+  req.body
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,37 @@
+meta {
+  name: Відправка форми лише з message_text та email
+  type: http
+  seq: 13
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+}
+
+body:json {
+  { 
+    "message_text": "Hello",
+    "email": "sadsadsad"
+  }
+}
+
+assert {
+  res.body: neq "Звернення додано успішно"
+  res.status: neq 200
+}
+
+tests {
+  console.log("Response body: " + res.body);
+  req.body
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

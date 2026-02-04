@@ -1,0 +1,29 @@
+meta {
+  name: Підписка з неправильним Content-Type
+  type: http
+  seq: 10
+}
+
+post {
+  url: https://softpro.ua/api/cms-subscribtion
+  body: text
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/uk
+  Content-Type: text/plain
+}
+
+body:text {
+  email=vladyslav.dobrovolski@gmail.com
+}
+
+assert {
+  res.status: neq 200
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

@@ -1,0 +1,15 @@
+{
+	"terminal.integrated.profiles.windows": {
+		"Project-CMD": {
+			"path": "C:\\Windows\\System32\\cmd.exe",
+			"args": []
+		},
+		"Project-PowerShell": {
+			"path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+		}
+	},
+	"terminal.integrated.defaultProfile.windows": "Command Prompt",
+	"terminal.integrated.automationProfile.windows": {
+		"path": "C:\\Windows\\System32\\cmd.exe"
+	}
+}
