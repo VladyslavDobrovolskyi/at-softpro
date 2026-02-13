@@ -1,0 +1,40 @@
+meta {
+  name: [TC-8] Відсутність імені користувача у полі Email у формі зворотнього зв'язку
+  type: http
+  seq: 106
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_name": "TC8 Користувач",
+    "email": "@example.com",
+    "phone": "380731111117",
+    "message_text": "Перевірка email без локальної частини."
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status === 200) throw new Error('[TC-8] API прийняло email без імені користувача');
+  if (res.status >= 500) throw new Error(`[TC-8] Серверна помилка: ${res.status}`);
+  if (bodyText === 'Звернення додано успішно') throw new Error('[TC-8] Success message для невалідного email');
+  console.log(`[TC-8] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

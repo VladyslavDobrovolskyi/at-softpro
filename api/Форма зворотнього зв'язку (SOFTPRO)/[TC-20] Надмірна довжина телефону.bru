@@ -1,0 +1,40 @@
+meta {
+  name: [TC-20] Надмірна довжина номеру у полі Телефон у формі зворотнього зв'язку
+  type: http
+  seq: 118
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_name": "TC20 Користувач",
+    "email": "tc20.phone@example.com",
+    "phone": "380731111111999",
+    "message_text": "Перевірка надмірної довжини номера телефону."
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status === 200) throw new Error('[TC-20] API прийняло занадто довгий номер телефону');
+  if (res.status >= 500) throw new Error(`[TC-20] Серверна помилка: ${res.status}`);
+  if (bodyText === 'Звернення додано успішно') throw new Error('[TC-20] Success message для довгого телефону');
+  console.log(`[TC-20] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

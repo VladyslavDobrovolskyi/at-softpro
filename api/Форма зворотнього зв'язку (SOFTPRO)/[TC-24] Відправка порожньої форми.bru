@@ -1,0 +1,37 @@
+meta {
+  name: [TC-24] Відправка порожньої форми для зворотнього зв'язку
+  type: http
+  seq: 122
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status === 200) throw new Error('[TC-24] API прийняло порожню форму');
+  if (res.status >= 500) throw new Error(`[TC-24] Серверна помилка: ${res.status}`);
+  if (bodyText === 'Звернення додано успішно') throw new Error('[TC-24] Success message для порожньої форми');
+  if (!bodyText || bodyText.trim().length === 0) throw new Error('[TC-24] Порожнє тіло відповіді');
+  console.log(`[TC-24] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

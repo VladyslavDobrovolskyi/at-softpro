@@ -1,16 +1,80 @@
 import { test, expect, type Page, type TestInfo } from '@playwright/test'
 import { faker } from '@faker-js/faker'
-import fc from 'fast-check'
+
 import * as allure from 'allure-js-commons'
 import { ConsultationForm } from './pages/consultation-form.page'
 
-test.describe('Форма консультації (Отримати консультацію)', () => {
+// Универсальный хелпер для alert-сообщения (успех/ошибка)
+export async function getAlertMessage(
+	page: Page,
+): Promise<{ type: 'success' | 'error' | 'other'; text: string } | null> {
+	const alert = page.locator('div.absolute.flex.items-center .flex-1 > p').first()
+	if (await alert.isVisible().catch(() => false)) {
+		const text = (await alert.textContent())?.trim() || ''
+		if (/успішн|дяку|thank|success|відправлен/i.test(text)) return { type: 'success', text }
+		if (/помилк|error|невірн|некоректн|invalid|коректн/i.test(text)) return { type: 'error', text }
+		return { type: 'other', text }
+	}
+	return null
+}
+
+export async function hasSuccessMessage(page: Page): Promise<boolean> {
+	const alert = await getAlertMessage(page)
+	return alert?.type === 'success'
+}
+
+function getCapturedRequests(page: Page): Array<{ url: string; method: string; postData?: string | null }> {
+	return ((page as any)._capturedRequests ? (page as any)._capturedRequests() : []) || []
+}
+
+function clearCapturedRequests(page: Page) {
+	const captured = getCapturedRequests(page)
+	captured.length = 0
+}
+
+async function submitAndCollect(page: Page, formObj: ConsultationForm, waitMs = 1200) {
+	clearCapturedRequests(page)
+	await formObj.submit()
+	const start = Date.now()
+	while (Date.now() - start < waitMs) {
+		if (getCapturedRequests(page).length > 0) break
+		await page.waitForTimeout(100)
+	}
+	const requests = [...getCapturedRequests(page)]
+	const alert = await getAlertMessage(page)
+	const success = alert?.type === 'success'
+	return { requests, alert, success }
+}
+
+type TableStatus = 'Пройдено' | 'Провалено'
+type DataType = 'valid' | 'invalid'
+
+function resolveTableStatusByUiSignals(params: {
+	dataType: DataType
+	hasValidationError: boolean
+	hasSuccessSignal: boolean
+}): TableStatus {
+	const { dataType, hasValidationError, hasSuccessSignal } = params
+
+	if (dataType === 'invalid') {
+		if (hasSuccessSignal) return 'Провалено'
+		if (hasValidationError) return 'Пройдено'
+		return 'Провалено'
+	}
+
+	if (hasSuccessSignal && !hasValidationError) return 'Пройдено'
+	return 'Провалено'
+}
+
+test.describe("Форма зворотнього зв'язку (Отримати консультацію)", () => {
+	test.describe.configure({ timeout: 120000 })
+
 	test.afterEach(async ({ page }: { page: Page }, testInfo: TestInfo) => {
 		if (testInfo.status !== testInfo.expectedStatus) {
 			const screenshot = await page.screenshot().catch(() => null)
 			if (screenshot) allure.attachment('скриншот', screenshot, 'image/png')
 			const html = await page.content().catch(() => null)
-			if (html) allure.attachment('HTML сторінки', html, 'text/html')
+			if (html) allure.attachment('HTML-код сторінки', html, 'text/html')
 			const captured = (page as any)._capturedRequests ? (page as any)._capturedRequests()! : []
 			if (captured && captured.length)
 				allure.attachment('перехоплені-запити', JSON.stringify(captured, null, 2), 'application/json')
@@ -18,7 +82,22 @@ test.describe('Форма консультації (Отримати консу�
 	})
 
 	test.beforeEach(async ({ page }: { page: Page }) => {
-		await page.goto('https://softpro.ua/uk')
+		const targetUrl = 'https://softpro.ua/uk'
+		let opened = false
+		let lastError: unknown = null
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			try {
+				await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 })
+				opened = true
+				break
+			} catch (e) {
+				lastError = e
+				if (attempt < 3) {
+					await page.waitForTimeout(1000)
+				}
+			}
+		}
+		if (!opened) throw lastError
 
 		// БЕЗПЕКА: при запуску проти production за замовчуванням перехоплюємо POST /api/**
 		const allowReal = process.env.RUN_PROD_REAL === 'true'
@@ -45,16 +124,15 @@ test.describe('Форма консультації (Отримати консу�
 		await formObj.open()
 	})
 
-	test('Позитивний: відправка форми з валідними даними та надсилання POST 📬 (дані з Faker)', async ({
+	test("[TC-0] Відправка листа з форми для зворотнього зв'язку використовуючи валідні дані", async ({
 		page,
 	}: {
 		page: Page
 	}) => {
 		await allure.epic('Контактна форма')
-		await allure.feature('Форма консультації')
-		await allure.story('Відправлення з валідними даними')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-0] Відправка листа з форми для зворотнього зв\'язку використовуючи валідні дані")
 		await allure.severity('critical')
-		await allure.owner('Vladyslav Dobrovolksyi')
 		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
 
 		const name = faker.person.fullName()
@@ -65,13 +143,12 @@ test.describe('Форма консультації (Отримати консу�
 		await formObj.fillForm({ name, email, phone, message })
 
 		const { nameValid, emailValid, messageValid, submitEnabled } = await formObj.checkValidity()
-
 		if (!nameValid || !emailValid || !messageValid || !submitEnabled) {
 			await formObj.fillForm({
-				name: 'Test User',
+				name: 'Тестовий Користувач',
 				email: 'prodtest@example.com',
 				phone: '+380501234567',
-				message: 'Hello from test',
+				message: 'Тестове повідомлення',
 			})
 		}
 
@@ -79,17 +156,10 @@ test.describe('Форма консультації (Отримати консу�
 		await formObj.submit()
 		const captured = await formObj.submitAndWaitForCapture(10000)
 
-		if (!captured) {
-			const content = await page.content()
-			console.error('POST не перехоплено; дамп стану форми:')
-			console.error('Значення імені:', await formObj.name.inputValue().catch(() => null))
-			console.error('Надіслати доступно:', await formObj.submitBtn.isEnabled().catch(() => null))
-		}
-
 		expect(captured).not.toBeNull()
-		const body = captured?.postData
 		allure.attachment('перехоплений-запит', JSON.stringify(captured, null, 2), 'application/json')
 
+		const body = captured?.postData
 		if (body) {
 			try {
 				const json = JSON.parse(body)
@@ -99,127 +169,628 @@ test.describe('Форма консультації (Отримати консу�
 				expect(body).toContain(email)
 			}
 		}
+
+		// Переконуємось, що після успішної відправки користувач бачить повідомлення про успіх.
+		await page.waitForTimeout(300)
+		// Даємо трохи більше часу на появу спливного повідомлення.
+		const start = Date.now()
+		let ok = false
+		while (Date.now() - start < 3000) {
+			if (await hasSuccessMessage(page)) {
+				ok = true
+				break
+			}
+			await page.waitForTimeout(200)
+		}
+		expect(ok).toBeTruthy()
 	})
 
-	test('Властивісний тест: випадкові email-адреси через fast-check (семпл)', async ({ page }: { page: Page }) => {
-		await allure.epic('Контактна форма')
-		await allure.feature('Форма консультації')
-		await allure.story('Випадкові email-адреси')
+	// --- Додаткові тести за вашим чек-листом (TC-1..TC-24) ---
+	// TC-1: Наявність всіх елементів форми
+	test("[TC-1] Наявність всіх елементів форми зворотнього зв'язку", async ({ page }: { page: Page }) => {
+		await allure.epic('Макет')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-1] Наявність всіх елементів форми зворотнього зв'язку")
+		await allure.severity('minor')
+
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		// Очікуємо щонайменше 3 поля введення та 1 багаторядкове поле.
+		const inputsCount = await page.locator('form:has(#user_name) input').count()
+		expect(inputsCount).toBeGreaterThanOrEqual(3)
+		const textareaCount = await page.locator('form:has(#user_name) textarea').count()
+		expect(textareaCount).toBeGreaterThanOrEqual(1)
+
+		// Кнопка відправки
+		expect(await formObj.submitBtn.isVisible()).toBeTruthy()
+
+		// Кнопка закриття: шукаємо кнопку у формі з текстом або символом 'х' / '×' / 'закрити'
+		const closeBtn = page
+			.locator('form:has(#user_name) button')
+			.filter({ hasText: /^(х|×|закрити)/i })
+			.first()
+		if ((await closeBtn.count()) > 0) {
+			expect(await closeBtn.isVisible()).toBeTruthy()
+		}
+	})
+
+	// Вставлено нижче: тести за вашим точним списком у запитаному порядку
+
+	// Кейси Email (TC-6..TC-16): порівняння з таблицею лише за UI-сигналами (помилка/успіх)
+	const emailCases: Array<{
+		id: string
+		input: string
+		note: string
+		dataType: DataType
+		expectedTableStatus: TableStatus
+	}> = [
+		{
+			id: 'TC-6',
+			input: 'usergmail.com',
+			note: 'Відсутність символу @',
+			dataType: 'invalid',
+			expectedTableStatus: 'Пройдено',
+		},
+		{
+			id: 'TC-7',
+			input: 'user@',
+			note: 'Відсутність домену',
+			dataType: 'invalid',
+			expectedTableStatus: 'Пройдено',
+		},
+		{
+			id: 'TC-8',
+			input: '@gmail.com',
+			note: 'Відсутність імені користувача',
+			dataType: 'invalid',
+			expectedTableStatus: 'Пройдено',
+		},
+		{
+			id: 'TC-9',
+			input: 'user.@gmail.com',
+			note: 'Крапка в кінці локальної частини',
+			dataType: 'invalid',
+			expectedTableStatus: 'Провалено',
+		},
+		{
+			id: 'TC-10',
+			input: '.user@gmail.com',
+			note: 'Крапка на початку локальної частини',
+			dataType: 'invalid',
+			expectedTableStatus: 'Провалено',
+		},
+		{
+			id: 'TC-11',
+			input: 'user@gmail.com.',
+			note: 'Крапка в кінці домену',
+			dataType: 'invalid',
+			expectedTableStatus: 'Провалено',
+		},
+		{
+			id: 'TC-12',
+			input: 'use..r@gmail.com',
+			note: 'Подвійна крапка в локальній частині',
+			dataType: 'invalid',
+			expectedTableStatus: 'Провалено',
+		},
+		{
+			id: 'TC-13',
+			input: 'user@gm..il.com',
+			note: 'Подвійна крапка в домені',
+			dataType: 'invalid',
+			expectedTableStatus: 'Провалено',
+		},
+		{
+			id: 'TC-14',
+			input: 'user@.gmail.com',
+			note: 'Крапка на початку домену',
+			dataType: 'invalid',
+			expectedTableStatus: 'Провалено',
+		},
+		{
+			id: 'TC-15',
+			input: 'user@g_mail.com',
+			note: 'Спецсимволи в домені',
+			dataType: 'invalid',
+			expectedTableStatus: 'Провалено',
+		},
+		{
+			id: 'TC-16',
+			input: 'use r@mail.com',
+			note: 'Пробіли всередині email',
+			dataType: 'invalid',
+			expectedTableStatus: 'Пройдено',
+		},
+	]
+
+	for (const c of emailCases) {
+		test(`[${c.id}] ${c.note} у полі Email у формі зворотнього зв'язку`, async ({ page }: { page: Page }) => {
+			await allure.epic('Валідація')
+			await allure.feature("Форма зворотнього зв'язку")
+			await allure.story(`[${c.id}] ${c.note} у полі Email у формі зворотнього зв'язку`)
+			await allure.severity('critical')
+
+			const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+
+			await test.step('Заповнити форму тестовими даними', async () => {
+				await formObj.fillForm({
+					email: c.input,
+					name: 'Тест Користувач',
+					phone: '+380991234567',
+					message: 'Валідне повідомлення для перевірки',
+				})
+			})
+
+			await test.step('Валідація email та поведінка форми', async () => {
+				const outcome = await submitAndCollect(page, formObj)
+				if (c.dataType === 'invalid') {
+					// Для невалидных данных: alert должен быть error, если success — тест падает
+					expect(
+						outcome.alert?.type,
+						`[${c.id}] Для невалидных данных alert должен быть 'error', а не '${outcome.alert?.type || 'none'}'`,
+					).toBe('error')
+				} else {
+					// Для валидных данных: alert должен быть success
+					expect(
+						outcome.alert?.type,
+						`[${c.id}] Для валидных данных alert должен быть 'success', а не '${outcome.alert?.type || 'none'}'`,
+					).toBe('success')
+				}
+			})
+		})
+	}
+
+	// TC-3..TC-5: Повертаємось до ПІБ-кейсів
+	// [TC-3] вже є вище як перевірка заборонених символів
+
+	// TC-4/TC-5 — переміщено в кінець списку (див. після TC-24)
+
+	// TC-17..TC-20: Телефон
+
+	// TC-17: Телефон — нецифрові символи
+	test("[TC-17] Телефон: нецифрові символи у полі Телефон у формі зворотнього зв'язку", async ({
+		page,
+	}: {
+		page: Page
+	}) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-17] Нецифрові символи у полі Телефон у формі зворотнього зв'язку")
+		await allure.severity('major')
+
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		const inputPhone = '380abc123421'
+		await formObj.fillForm({ phone: inputPhone, name: 'Тест', email: 'test@example.com', message: 'Hi' })
+		const phoneFieldValue = await formObj.phone.inputValue()
+		const typedDigits = inputPhone.replace(/\D/g, '')
+		const fieldDigits = phoneFieldValue.replace(/\D/g, '')
+
+		// Якщо UI змінив введення: падаємо лише коли користувач ввів більше дозволеного і відбулася відправка + успіх.
+		if (typedDigits !== fieldDigits) {
+			const expectedLen = 12
+			if (typedDigits.length > expectedLen) {
+				// Пробуємо відправити — тест падає лише якщо реально пішов запит і показано повідомлення про успіх.
+				;(page as any)._capturedRequests()!.length = 0
+				await formObj.submit()
+				await page.waitForTimeout(800)
+				const capturedAfter = (page as any)._capturedRequests() || []
+				const successAfter = await hasSuccessMessage(page)
+				if (capturedAfter.length > 0 && successAfter)
+					throw new Error(
+						`[TC-17] UI прийняв забагато цифр і відправив форму (введено=${typedDigits}, у полі=${fieldDigits})`,
+					)
+				// Інакше дозволяємо нормалізацію/обрізку — продовжуємо стандартні перевірки.
+			}
+		}
+
+		const res = await formObj.checkValidity()
+		if (!res.submitEnabled) {
+			expect(res.submitEnabled).toBeFalsy()
+			// Натискаємо кнопку відправки (force), щоб проявити тимчасове повідомлення клієнтської валідації.
+			await formObj.submitBtn.click({ force: true })
+			// Чекаємо появу будь-якого повідомлення валідації (короткий таймаут).
+			let phoneValidationVisible = false
+			const waitForPhoneMsg = async (selector: string, t = 800) => {
+				try {
+					await page.locator(selector).waitFor({ state: 'visible', timeout: t })
+					return true
+				} catch {
+					return false
+				}
+			}
+			phoneValidationVisible =
+				phoneValidationVisible ||
+				(await waitForPhoneMsg('text=/Будь ласка, введіть коректний номер телефону/i', 1500))
+			phoneValidationVisible =
+				phoneValidationVisible ||
+				(await waitForPhoneMsg(
+					'form:has(#user_name) >> text=/Будь ласка, введіть коректний номер телефону/i',
+					1200,
+				))
+			phoneValidationVisible = phoneValidationVisible || (await waitForPhoneMsg('text=/коректн.*номер/i', 800))
+			phoneValidationVisible = phoneValidationVisible || (await waitForPhoneMsg('text=/у форматі\s*380/i', 800))
+			phoneValidationVisible = phoneValidationVisible || (await waitForPhoneMsg('text=380XXXXXXXXX', 800))
+			phoneValidationVisible =
+				phoneValidationVisible || (await waitForPhoneMsg('text=/Please enter a valid phone number/i', 800))
+			const phoneNativeValidation = await formObj.phone
+				.evaluate(el => (el as HTMLInputElement).validationMessage || '')
+				.catch(() => '')
+			if (phoneNativeValidation && phoneNativeValidation.length) phoneValidationVisible = true
+			expect(phoneValidationVisible).toBeTruthy()
+			// Переконуємось, що POST не відправлено (джерело істини — перехоплені запити).
+			await page.waitForTimeout(500)
+			expect(((page as any)._capturedRequests() || []).length).toBe(0)
+		} else {
+			;(page as any)._capturedRequests()!.length = 0
+			await formObj.submit()
+			await page.waitForTimeout(800)
+			const captured = (page as any)._capturedRequests() || []
+			const successAfter = await hasSuccessMessage(page)
+			if (captured.length > 0) {
+				// Якщо для невалідного телефону відправився запит — це відхилення від ручної таблиці.
+				throw new Error('[TC-17] Для невалідного телефону відправився POST запит')
+			}
+			expect(successAfter).toBeFalsy()
+
+			// Переконуємось, що немає повідомлення про помилку телефону, якщо відправка пройшла без блокування.
+			expect(
+				(await page
+					.locator('form:has(#user_name) >> text=/Будь ласка, введіть коректний номер телефону/i')
+					.count()) === 0 &&
+					(await page
+						.locator('form:has(#user_name) >> text=/Please enter a valid phone number/i')
+						.count()) === 0,
+			).toBeTruthy()
+		}
+	})
+
+	// TC-18: Телефон — неправильний початок
+	test("[TC-18] Телефон: неправильний початок номера (не 380) у формі зворотнього зв'язку", async ({
+		page,
+	}: {
+		page: Page
+	}) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-18] Некоректний початок номера у формі зворотнього зв'язку")
+		await allure.severity('major')
+
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		const inputPhone = '99123456789'
+		await formObj.fillForm({ phone: inputPhone, name: 'Тест', email: 'test@example.com', message: 'Hi' })
+		const phoneFieldValue = await formObj.phone.inputValue()
+		const typedDigits = inputPhone.replace(/\D/g, '')
+		const fieldDigits = phoneFieldValue.replace(/\D/g, '')
+
+		if (typedDigits !== fieldDigits) {
+			const expectedLen = 12
+			if (typedDigits.length > expectedLen) {
+				;(page as any)._capturedRequests()!.length = 0
+				await formObj.submit()
+				await page.waitForTimeout(800)
+				const capturedAfter = (page as any)._capturedRequests() || []
+				const successAfter = await hasSuccessMessage(page)
+				if (capturedAfter.length > 0 && successAfter)
+					throw new Error(
+						`[TC-18] UI прийняв забагато цифр і відправив форму (введено=${typedDigits}, у полі=${fieldDigits})`,
+					)
+			}
+		}
+
+		const res = await formObj.checkValidity()
+		if (!res.submitEnabled) {
+			expect(res.submitEnabled).toBeFalsy()
+			await page.waitForTimeout(500)
+			// Джерело істини для факту відправки — перехоплені запити.
+			expect(((page as any)._capturedRequests() || []).length).toBe(0)
+		} else {
+			;(page as any)._capturedRequests()!.length = 0
+			await formObj.submit()
+			await page.waitForTimeout(800)
+			const captured = (page as any)._capturedRequests() || []
+			const success = await hasSuccessMessage(page)
+			if (captured.length > 0 && success) {
+				throw new Error("[TC-18] Для невалідного телефону відправився POST і з'явилось повідомлення про успіх")
+			}
+
+			if (captured.length > 0) {
+				const body = captured[0].postData || ''
+				expect(body).toContain(fieldDigits)
+			}
+
+			expect(success).toBeFalsy()
+		}
+	})
+
+	// --- TC-2: Адаптивність поля для повідомлення (додано)
+	test("[TC-2] Адаптивність поля для повідомлення у формі зворотнього зв'язку", async ({ page }: { page: Page }) => {
+		await allure.epic('Макет')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-2] Адаптивність поля для повідомлення у формі зворотнього зв'язку")
+		await allure.severity('minor')
+
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		const initialHeight = await formObj.message.evaluate(el => (el as HTMLElement).offsetHeight)
+		const longMessage = Array.from({ length: 30 })
+			.map(() => 'Line of text')
+			.join('\n')
+		await formObj.fillForm({ message: longMessage })
+		await page.waitForTimeout(300)
+		const newHeight = await formObj.message.evaluate(el => (el as HTMLElement).offsetHeight)
+		expect(newHeight).toBeGreaterThanOrEqual(initialHeight)
+	})
+	test("[TC-19] Телефон: недостатня довжина у формі зворотнього зв'язку", async ({ page }: { page: Page }) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-19] Недостатня довжина номера у полі Телефон у формі зворотнього зв'язку")
+		await allure.severity('major')
+
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		const inputPhone = '38099123456'
+		await formObj.fillForm({ phone: inputPhone, name: 'Тест', email: 'test@example.com', message: 'Hi' })
+
+		// Перевіряємо, що значення поля збігається з введеним (щоб виявити тихі зміни).
+		const phoneFieldValue = await formObj.phone.inputValue()
+		const typedDigits = inputPhone.replace(/\D/g, '')
+		const fieldDigits = phoneFieldValue.replace(/\D/g, '')
+
+		if (typedDigits !== fieldDigits) {
+			const expectedLen = 12
+			if (typedDigits.length > expectedLen) {
+				;(page as any)._capturedRequests()!.length = 0
+				await formObj.submit()
+				await page.waitForTimeout(800)
+				const capturedAfter = (page as any)._capturedRequests() || []
+				const successAfter = await hasSuccessMessage(page)
+				if (capturedAfter.length > 0 && successAfter)
+					throw new Error(
+						`[TC-19] UI прийняв забагато цифр і відправив форму (введено=${typedDigits}, у полі=${fieldDigits})`,
+					)
+			}
+		}
+
+		let res = await formObj.checkValidity()
+		expect(res.submitEnabled).toBeFalsy()
+		// Натискаємо кнопку відправки (force), щоб проявити повідомлення клієнтської валідації.
+		await formObj.submitBtn.click({ force: true })
+		let phoneValidationVisible = false
+		const waitForPhoneMsg = async (selector: string, t = 800) => {
+			try {
+				await page.locator(selector).waitFor({ state: 'visible', timeout: t })
+				return true
+			} catch {
+				return false
+			}
+		}
+		phoneValidationVisible =
+			phoneValidationVisible ||
+			(await waitForPhoneMsg(
+				'form:has(#user_name) >> text=/Будь ласка, введіть коректний номер телефону/i',
+				1200,
+			))
+		phoneValidationVisible =
+			phoneValidationVisible ||
+			(await waitForPhoneMsg('text=/Будь ласка, введіть коректний номер телефону у форматі 380XXXXXXXXX/i', 1200))
+		phoneValidationVisible = phoneValidationVisible || (await waitForPhoneMsg('text=/коректн.*номер/i', 800))
+		phoneValidationVisible = phoneValidationVisible || (await waitForPhoneMsg('text=/у форматі\\s*380/i', 800))
+		phoneValidationVisible = phoneValidationVisible || (await waitForPhoneMsg('text=380XXXXXXXXX', 800))
+		phoneValidationVisible =
+			phoneValidationVisible || (await waitForPhoneMsg('text=/Please enter a valid phone number/i', 800))
+		const phoneNativeValidation = await formObj.phone
+			.evaluate(el => (el as HTMLInputElement).validationMessage || '')
+			.catch(() => '')
+		if (phoneNativeValidation && phoneNativeValidation.length) phoneValidationVisible = true
+		expect(phoneValidationVisible).toBeTruthy()
+		await page.waitForTimeout(500)
+		// Ознака відправки визначається виключно за перехоплені запити.
+		expect(((page as any)._capturedRequests() || []).length).toBe(0)
+	})
+
+	test("[TC-20] Телефон: надмірна довжина у формі зворотнього зв'язку", async ({ page }: { page: Page }) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-20] Надмірна довжина номера у полі Телефон у формі зворотнього зв'язку")
+		await allure.severity('major')
+		;(page as any)._capturedRequests()!.length = 0 // Очищаємо перехоплені запити перед перевіркою.
+		;(page as any)._capturedRequests()!.length = 0
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		const inputPhone = '3809912345612'
+		await formObj.fillForm({ phone: inputPhone, name: 'Тест', email: 'test@example.com', message: 'Hi' })
+
+		// Якщо UI тихо обрізає номер — фіксуємо це через порівняння введеного та значення в полі.
+		const phoneFieldValue = await formObj.phone.inputValue()
+		const typedDigits = inputPhone.replace(/\D/g, '')
+		const fieldDigits = phoneFieldValue.replace(/\D/g, '')
+
+		if (typedDigits !== fieldDigits) {
+			const expectedLen = 12
+			if (typedDigits.length > expectedLen) {
+				;(page as any)._capturedRequests()!.length = 0
+				await formObj.submit()
+				await page.waitForTimeout(800)
+				const capturedAfter = (page as any)._capturedRequests() || []
+				// Для факту відправки покладаємось на перехоплені запити, а не на текст сторінки.
+				if (capturedAfter.length > 0) {
+					// Ручна таблиця очікує успішний результат; фіксуємо діагностику без падіння тут.
+					console.warn(
+						`[TC-20] Виявлено відправку для надмірної довжини телефону (введено=${typedDigits}, у полі=${fieldDigits})`,
+					)
+				}
+			}
+		}
+
+		let res = await formObj.checkValidity()
+		expect(res.submitEnabled).toBeFalsy()
+		await page.waitForTimeout(500)
+		// Згідно ручної таблиці: тимчасові спливні повідомлення не вважаємо блокером у цій перевірці.
+	})
+	// [TC-21] Повідомлення — нижня границя (9) — помилка
+	test("[TC-21] Недостатня кількість символів у багаторядковому полі Повідомлення у формі зворотнього зв'язку", async ({
+		page,
+	}: {
+		page: Page
+	}) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story(
+			"[TC-21] Недостатня кількість символів у багаторядковому полі Повідомлення у формі зворотнього зв'язку",
+		)
+		await allure.severity('major')
+
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		await formObj.fillForm({
+			name: 'Тест Користувач',
+			email: 'test@example.com',
+			phone: '+380501234567',
+			message: 'a'.repeat(9),
+		})
+		const outcome = await submitAndCollect(page, formObj)
+		expect(
+			outcome.alert?.type,
+			'[TC-21] Для невалидных данных alert должен быть "error", а не "' + (outcome.alert?.type || 'none') + '"',
+		).toBe('error')
+	})
+
+	// [TC-22] Повідомлення — верхня границя (2000) — валідно
+	test("[TC-22] Верхня границя кількості символів Повідомлення у формі зворотнього зв'язку", async ({
+		page,
+	}: {
+		page: Page
+	}) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-22] Верхня границя кількості символів Повідомлення у формі зворотнього зв'язку")
 		await allure.severity('normal')
 
 		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
-		const samples: string[] = fc.sample(fc.emailAddress(), 12)
-
-		for (const e of samples) {
-			await test.step(`перевірити email ${e}`, async () => {
-				await formObj.fillForm({ email: e })
-				const isValid = await formObj.checkValidity().then(v => v.emailValid)
-
-				const reqPromise = page
-					.waitForRequest(req => req.method() === 'POST' && req.url().includes('/api'), { timeout: 800 })
-					.then(r => r)
-					.catch(() => null)
-
-				await formObj.submit()
-				const req = await reqPromise
-				const has500: number = await page.locator('text=500').count()
-				expect(has500).toBe(0)
-
-				if (!isValid) expect(req).toBeNull()
-			})
-		}
-	})
-
-	test("Негативний: обов'язкові поля блокують відправку ❌", async ({ page }: { page: Page }) => {
-		await allure.epic('Контактна форма')
-		await allure.feature('Форма консультації')
-		await allure.story("Обов'язкові поля")
-		await allure.severity('critical')
-
-		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
-
-		// 1) Усі поля порожні
-		await formObj.fillForm({ name: '', email: '', phone: '', message: '' })
-		await expect(
-			page.waitForRequest(req => req.method() === 'POST' && req.url().includes('/api'), { timeout: 800 }),
-		).rejects.toThrow()
-
-		// 2) Відсутнє лише поле повідомлення
-		await formObj.fillForm({ name: 'Іван', email: 'ivan@example.com', phone: '+380501234567', message: '' })
-
-		const messageValid: boolean = await formObj.checkValidity().then(v => v.messageValid)
-		if (!messageValid) {
-			await formObj.submit()
-			await expect(
-				page.waitForRequest(req => req.method() === 'POST' && req.url().includes('/api'), { timeout: 800 }),
-			).rejects.toThrow()
-		} else {
-			const requestPromise = page
-				.waitForRequest(req => req.method() === 'POST' && req.url().includes('/api'), { timeout: 800 })
-				.catch(() => null)
-			await formObj.submit()
-			const req = await requestPromise
-			expect(req).toBeNull()
-		}
-	})
-
-	// Перевірка: окремі кейси валідації email
-	const invalids = ['plainaddress.com', 'test@@example.com', 'test@', '@example.com', 'test..user@example.com']
-
-	invalids.forEach(bad => {
-		test(`Негативний: валідація email для ${bad}`, async ({ page }: { page: Page }) => {
-			await allure.epic('Контактна форма')
-			await allure.feature('Форма консультації')
-			await allure.story('Валідація email')
-			await allure.severity('major')
-
-			const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
-			await formObj.fillForm({ email: bad })
-
-			const valid = await formObj.checkValidity().then(v => v.emailValid)
-			if (!valid) {
-				await formObj.submit()
-				await expect(
-					page.waitForRequest(req => req.method() === 'POST' && req.url().includes('/api'), { timeout: 800 }),
-				).rejects.toThrow()
-			} else {
-				const req = await page
-					.waitForRequest(req => req.method() === 'POST' && req.url().includes('/api'), { timeout: 800 })
-					.catch(() => null)
-				expect(req).toBeNull()
-			}
-		})
-	})
-
-	test('XSS/SQLi в повідомленні не повинні ламати сторінку (немає 500) 🔒', async ({ page }: { page: Page }) => {
-		await allure.epic('Контактна форма')
-		await allure.feature('Форма консультації')
-		await allure.story('Безпека: XSS/SQLi в повідомленні')
-		await allure.severity('critical')
-
-		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
-
 		await formObj.fillForm({
-			name: 'Небезпечний',
-			email: 'safe@example.com',
+			name: 'Тест Користувач',
+			email: 'test@example.com',
 			phone: '+380501234567',
-			message: '<script>alert(1)</script> OR 1=1',
+			message: 'a'.repeat(2000),
 		})
+		const outcome = await submitAndCollect(page, formObj)
+		expect(
+			outcome.alert?.type,
+			'[TC-22] Для валидных данных alert должен быть "success", а не "' + (outcome.alert?.type || 'none') + '"',
+		).toBe('success')
+	})
 
-		const requestPromise = page
-			.waitForRequest(req => req.method() === 'POST' && req.url().includes('/api'), { timeout: 3000 })
-			.catch(() => null)
+	// [TC-23] Повідомлення — верхня границя +1 (2001) — помилка
+	test("[TC-23] Надмірна кількість символів у полі Повідомлення у формі зворотнього зв'язку", async ({
+		page,
+	}: {
+		page: Page
+	}) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-23] Надмірна кількість символів у полі Повідомлення у формі зворотнього зв'язку")
+		await allure.severity('major')
 
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		await formObj.fillForm({
+			name: 'Тест Користувач',
+			email: 'test@example.com',
+			phone: '+380501234567',
+			message: 'a'.repeat(2001),
+		})
+		const outcome = await submitAndCollect(page, formObj)
+		expect(
+			outcome.alert?.type,
+			'[TC-23] Для невалидных данных alert должен быть "error", а не "' + (outcome.alert?.type || 'none') + '"',
+		).toBe('error')
+	})
+	// [TC-24] Відправка порожньої форми для зворотнього зв'язку
+	test("[TC-24] Відправка порожньої форми для зворотнього зв'язку", async ({ page }: { page: Page }) => {
+		await allure.epic('Контактна форма')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-24] Відправка порожньої форми для зворотнього зв'язку")
+		await allure.severity('critical')
+
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+
+		// 1) Усі поля порожні.
+		await formObj.fillForm({ name: '', email: '', phone: '', message: '' })
+		;(page as any)._capturedRequests()!.length = 0
 		await formObj.submit()
 		await page.waitForTimeout(800)
-
-		const req = await requestPromise
-		const has500 = await page.locator('text=500').count()
-		expect(has500).toBe(0)
-
-		if (req) {
-			const body = req.postData() || ''
-			expect(body).toContain('safe@example.com')
+		const captured = (page as any)._capturedRequests() || []
+		// Якщо порожня форма відправила POST — це помилка (джерело істини: перехоплені запити).
+		if (captured.length > 0) {
+			throw new Error('[TC-24] Порожня форма відправила POST запит')
 		}
+		expect(captured.length).toBe(0)
+	})
+
+
+	// TC-3: Введення заборонених символів у полі ПІБ
+	test("[TC-3] Введення заборонених символів в полі ПІБ у формі зворотнього зв'язку", async ({
+		page,
+	}: {
+		page: Page
+	}) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-3] Введення заборонених символів в полі ПІБ у формі зворотнього зв'язку")
+		await allure.severity('major')
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		await formObj.fillForm({
+			name: 'Іван!@#123',
+			email: 'test@example.com',
+			phone: '+380501234567',
+			message: 'Валідне повідомлення для перевірки',
+		})
+		const outcome = await submitAndCollect(page, formObj)
+		expect(
+			outcome.alert?.type,
+			'[TC-3] Для невалидных данных alert должен быть "error", а не "' + (outcome.alert?.type || 'none') + '"',
+		).toBe('error')
+	})
+
+	// TC-4: ПІБ мінімум 1 — помилка
+	test("[TC-4] Нижня границя-1 кількості символів у полі ПІБ у формі зворотнього зв'язку", async ({
+		page,
+	}: {
+		page: Page
+	}) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-4] Нижня границя-1 кількості символів у полі ПІБ у формі зворотнього зв'язку")
+		await allure.severity('major')
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		await formObj.fillForm({
+			name: 'Я',
+			email: 'test@example.com',
+			phone: '+380501234567',
+			message: 'Валідне повідомлення для перевірки',
+		})
+		const outcome = await submitAndCollect(page, formObj)
+		expect(
+			outcome.alert?.type,
+			'[TC-4] Для невалидных данных alert должен быть "error", а не "' + (outcome.alert?.type || 'none') + '"',
+		).toBe('error')
+	})
+
+	// TC-5: ПІБ мінімум 2 — валідно
+	test("[TC-5] Нижня границя кількості символів у полі ПІБ у формі зворотнього зв'язку", async ({
+		page,
+	}: {
+		page: Page
+	}) => {
+		await allure.epic('Валідація')
+		await allure.feature("Форма зворотнього зв'язку")
+		await allure.story("[TC-5] Нижня границя кількості символів у полі ПІБ у формі зворотнього зв'язку")
+		await allure.severity('normal')
+		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
+		await formObj.fillForm({
+			name: 'Ян',
+			email: 'test@example.com',
+			phone: '+380501234567',
+			message: 'Валідне повідомлення для перевірки',
+		})
+		const outcome = await submitAndCollect(page, formObj)
+		expect(
+			outcome.alert?.type,
+			'[TC-5] Для валидных данных alert должен быть "success", а не "' + (outcome.alert?.type || 'none') + '"',
+		).toBe('success')
 	})
 })

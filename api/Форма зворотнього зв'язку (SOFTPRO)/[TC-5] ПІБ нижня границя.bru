@@ -1,0 +1,39 @@
+meta {
+  name: [TC-5] Нижня границя кількості символів у полі ПІБ у формі зворотнього зв'язку
+  type: http
+  seq: 103
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_name": "Іва",
+    "email": "tc5.name@example.com",
+    "phone": "380731111114",
+    "message_text": "Перевірка мінімально допустимої довжини ПІБ."
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status !== 200) throw new Error(`[TC-5] Очікувався статус 200, отримано ${res.status}`);
+  if (bodyText !== 'Звернення додано успішно') throw new Error(`[TC-5] Неочікуване тіло відповіді: ${bodyText}`);
+  console.log(`[TC-5] OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

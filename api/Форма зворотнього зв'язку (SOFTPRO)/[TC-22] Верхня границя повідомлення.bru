@@ -1,0 +1,41 @@
+meta {
+  name: [TC-22] Верхня границя кількості символів Повідомлення у формі зворотнього зв'язку
+  type: http
+  seq: 120
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+script:pre-request {
+  const { messageGen } = require('./JavaScript/messageGen');
+
+  req.body = {
+    "user_name": "TC22 Користувач",
+    "email": "tc22.message@example.com",
+    "phone": "380731111127",
+    "message_text": messageGen(500)
+  };
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status !== 200) throw new Error(`[TC-22] Очікувався статус 200, отримано ${res.status}`);
+  if (bodyText !== 'Звернення додано успішно') throw new Error(`[TC-22] Неочікуване тіло відповіді: ${bodyText}`);
+  console.log(`[TC-22] OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

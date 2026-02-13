@@ -1,0 +1,7 @@
+[    1383ms] [WARNING] Swiper Loop Warning: The number of slides is not enough for loop mode, it will be disabled or not function properly. You need to add more slides (or make duplicates) or lower the values of slidesPerView and slidesPerGroup parameters @ https://softpro.ua/_astro/autoplay.yJgebXxW.js:0
+[    1404ms] [WARNING] Swiper Loop Warning: The number of slides is not enough for loop mode, it will be disabled or not function properly. You need to add more slides (or make duplicates) or lower the values of slidesPerView and slidesPerGroup parameters @ https://softpro.ua/_astro/autoplay.yJgebXxW.js:0
+[   98939ms] [ERROR] Pattern attribute value \380\d{9} is not a valid regular expression: Uncaught SyntaxError: Invalid regular expression: /\380\d{9}/v: Invalid escape @ https://softpro.ua/uk:0
+[  307877ms] [ERROR] Access to fetch at 'https://help.softpro.ua/api/feedback' from origin 'https://softpro.ua' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ https://softpro.ua/uk:0
+[  307878ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://help.softpro.ua/api/feedback:0
+[  314863ms] [ERROR] Access to fetch at 'https://help.softpro.ua/api/feedback' from origin 'https://softpro.ua' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ https://softpro.ua/uk:0
+[  314863ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://help.softpro.ua/api/feedback:0

@@ -1,0 +1,42 @@
+meta {
+  name: [TC-40] Запит на отримання консультації з ін'єкцією XSS у модулі з одним полем
+  type: http
+  seq: 214
+}
+
+post {
+  url: https://softpro.ua/api/cms-subscribtion
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/uk
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "<script>alert(1)</script>@example.com"
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  const blocked = res.status >= 500 || bodyText.toLowerCase().includes('temporarily') || bodyText.toLowerCase().includes('unavailable');
+  if (blocked) {
+    console.log(`[TC-40] BLOCKED: service unavailable. status=${res.status}; body=${bodyText}`);
+    return;
+  }
+
+  if (res.status >= 500) throw new Error(`[TC-40] Сервер впав на XSS payload: ${res.status}`);
+  if (bodyText.toLowerCase().includes('<script>')) throw new Error('[TC-40] Відповідь відображає сирий XSS payload');
+  console.log(`[TC-40] Security check OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}
+
+

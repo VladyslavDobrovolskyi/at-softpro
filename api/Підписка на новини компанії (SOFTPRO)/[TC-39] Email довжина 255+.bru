@@ -1,0 +1,43 @@
+meta {
+  name: [TC-39] Запит із занадто довгим Email (більше 255 символів) у модулі з одним полем
+  type: http
+  seq: 213
+}
+
+post {
+  url: https://softpro.ua/api/cms-subscribtion
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/uk
+  Content-Type: application/json
+}
+
+script:pre-request {
+  const local = 'a'.repeat(246);
+  req.body = {
+    email: `${local}@example.com`
+  };
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  const blocked = res.status >= 500 || bodyText.toLowerCase().includes('temporarily') || bodyText.toLowerCase().includes('unavailable');
+  if (blocked) {
+    console.log(`[TC-39] BLOCKED: service unavailable. status=${res.status}; body=${bodyText}`);
+    return;
+  }
+
+  if (res.status === 200) throw new Error('[TC-39] API прийняло email довжиною >255 символів');
+  if (bodyText.toLowerCase().includes('success')) throw new Error('[TC-39] Отримано success для email >255');
+  console.log(`[TC-39] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}
+
+

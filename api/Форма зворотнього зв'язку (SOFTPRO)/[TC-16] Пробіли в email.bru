@@ -1,0 +1,40 @@
+meta {
+  name: [TC-16] Пробіли всередині email у полі Email у формі зворотнього зв'язку
+  type: http
+  seq: 114
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_name": "TC16 Користувач",
+    "email": "user name@example.com",
+    "phone": "380731111125",
+    "message_text": "Перевірка пробілів всередині email."
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status === 200) throw new Error('[TC-16] API прийняло email із пробілом');
+  if (res.status >= 500) throw new Error(`[TC-16] Серверна помилка: ${res.status}`);
+  if (bodyText === 'Звернення додано успішно') throw new Error('[TC-16] Success message для невалідного email');
+  console.log(`[TC-16] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

@@ -1,0 +1,40 @@
+meta {
+  name: [TC-15] Спецсимволи в домені у полі Email у формі зворотнього зв'язку
+  type: http
+  seq: 113
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_name": "TC15 Користувач",
+    "email": "user@exa!mple.com",
+    "phone": "380731111124",
+    "message_text": "Перевірка спецсимволів у домені email."
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status === 200) throw new Error('[TC-15] API прийняло email зі спецсимволом у домені');
+  if (res.status >= 500) throw new Error(`[TC-15] Серверна помилка: ${res.status}`);
+  if (bodyText === 'Звернення додано успішно') throw new Error('[TC-15] Success message для невалідного email');
+  console.log(`[TC-15] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

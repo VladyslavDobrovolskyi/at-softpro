@@ -36,7 +36,13 @@ export default defineConfig({
 	projects: [
 		{
 			name: 'chromium',
-			use: { ...devices['Desktop Chrome'] },
+			use: {
+				...devices['Desktop Chrome'],
+				// Allow optional slowMo for visual debugging: set SLOW_MS environment variable (milliseconds)
+				launchOptions: {
+					slowMo: Number(process.env.SLOW_MS || 0),
+				},
+			},
 		},
 
 		{

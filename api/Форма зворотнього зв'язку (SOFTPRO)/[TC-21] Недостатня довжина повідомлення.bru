@@ -1,0 +1,40 @@
+meta {
+  name: [TC-21] Недостатня кількість символів у багаторядкову полі Повідомлення у формі зворотнього зв'язку
+  type: http
+  seq: 119
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_name": "TC21 Користувач",
+    "email": "tc21.message@example.com",
+    "phone": "380731111126",
+    "message_text": "Коротко"
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status === 200) throw new Error('[TC-21] API прийняло занадто коротке повідомлення');
+  if (res.status >= 500) throw new Error(`[TC-21] Серверна помилка: ${res.status}`);
+  if (bodyText === 'Звернення додано успішно') throw new Error('[TC-21] Success message для короткого повідомлення');
+  console.log(`[TC-21] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

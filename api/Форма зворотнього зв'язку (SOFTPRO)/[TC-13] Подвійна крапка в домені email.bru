@@ -1,0 +1,40 @@
+meta {
+  name: [TC-13] Подвійна крапка в домені у полі Email у формі зворотнього зв'язку
+  type: http
+  seq: 111
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_name": "TC13 Користувач",
+    "email": "user@example..com",
+    "phone": "380731111122",
+    "message_text": "Перевірка подвійної крапки в доменній частині email."
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status === 200) throw new Error('[TC-13] API прийняло email з подвійною крапкою в домені');
+  if (res.status >= 500) throw new Error(`[TC-13] Серверна помилка: ${res.status}`);
+  if (bodyText === 'Звернення додано успішно') throw new Error('[TC-13] Success message для невалідного email');
+  console.log(`[TC-13] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

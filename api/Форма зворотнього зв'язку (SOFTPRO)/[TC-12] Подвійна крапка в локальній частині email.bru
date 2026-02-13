@@ -1,0 +1,40 @@
+meta {
+  name: [TC-12] Подвійна крапка в локальній частині адреси у полі Email у формі зворотнього зв'язку
+  type: http
+  seq: 110
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_name": "TC12 Користувач",
+    "email": "user..name@example.com",
+    "phone": "380731111121",
+    "message_text": "Перевірка подвійної крапки в локальній частині email."
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status === 200) throw new Error('[TC-12] API прийняло email з подвійною крапкою в локальній частині');
+  if (res.status >= 500) throw new Error(`[TC-12] Серверна помилка: ${res.status}`);
+  if (bodyText === 'Звернення додано успішно') throw new Error('[TC-12] Success message для невалідного email');
+  console.log(`[TC-12] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

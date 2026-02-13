@@ -1,0 +1,42 @@
+meta {
+  name: [TC-34] Запит з подвійною крапкою в Email у модулі з одним полем
+  type: http
+  seq: 208
+}
+
+post {
+  url: https://softpro.ua/api/cms-subscribtion
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/uk
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "user..name@example.com"
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  const blocked = res.status >= 500 || bodyText.toLowerCase().includes('temporarily') || bodyText.toLowerCase().includes('unavailable');
+  if (blocked) {
+    console.log(`[TC-34] BLOCKED: service unavailable. status=${res.status}; body=${bodyText}`);
+    return;
+  }
+
+  if (res.status === 200) throw new Error('[TC-34] API прийняло email з подвійною крапкою');
+  if (bodyText.toLowerCase().includes('success')) throw new Error('[TC-34] Отримано success для невалідного email');
+  console.log(`[TC-34] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}
+
+

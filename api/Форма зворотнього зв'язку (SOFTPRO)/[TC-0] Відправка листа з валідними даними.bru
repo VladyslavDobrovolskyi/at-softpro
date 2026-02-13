@@ -1,0 +1,39 @@
+meta {
+  name: [TC-0] Відправка листа з форми для зворотнього зв'язку використовуючи валідні дані
+  type: http
+  seq: 100
+}
+
+post {
+  url: https://help.softpro.ua/api/feedback
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_name": "Тестовий Користувач Валідний",
+    "email": "tc0.valid@example.com",
+    "phone": "380731111111",
+    "message_text": "Тестове валідне повідомлення для перевірки API."
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  if (res.status !== 200) throw new Error(`[TC-0] Очікувався статус 200, отримано ${res.status}`);
+  if (bodyText !== 'Звернення додано успішно') throw new Error(`[TC-0] Неочікуване тіло відповіді: ${bodyText}`);
+  console.log(`[TC-0] OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+

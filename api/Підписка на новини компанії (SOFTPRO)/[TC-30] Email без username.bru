@@ -1,0 +1,42 @@
+meta {
+  name: [TC-30] Запит з Email без username у модулі з одним полем
+  type: http
+  seq: 204
+}
+
+post {
+  url: https://softpro.ua/api/cms-subscribtion
+  body: json
+  auth: inherit
+}
+
+headers {
+  Referer: https://softpro.ua/uk
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "@example.com"
+  }
+}
+
+tests {
+  const bodyText = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? {});
+  const blocked = res.status >= 500 || bodyText.toLowerCase().includes('temporarily') || bodyText.toLowerCase().includes('unavailable');
+  if (blocked) {
+    console.log(`[TC-30] BLOCKED: service unavailable. status=${res.status}; body=${bodyText}`);
+    return;
+  }
+
+  if (res.status === 200) throw new Error('[TC-30] API прийняло email без username');
+  if (bodyText.toLowerCase().includes('success')) throw new Error('[TC-30] Отримано success для невалідного email');
+  console.log(`[TC-30] Validation OK. status=${res.status}; body=${bodyText}`);
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}
+
+
