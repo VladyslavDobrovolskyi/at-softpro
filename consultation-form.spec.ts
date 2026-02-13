@@ -3,8 +3,6 @@ import { faker } from '@faker-js/faker'
 
 import * as allure from 'allure-js-commons'
 import { ConsultationForm } from './pages/consultation-form.page'
-
-// Универсальный хелпер для alert-сообщения (успех/ошибка)
 export async function getAlertMessage(
 	page: Page,
 ): Promise<{ type: 'success' | 'error' | 'other'; text: string } | null> {
@@ -98,8 +96,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 			}
 		}
 		if (!opened) throw lastError
-
-		// БЕЗПЕКА: при запуску проти production за замовчуванням перехоплюємо POST /api/**
 		const allowReal = process.env.RUN_PROD_REAL === 'true'
 		let capturedRequests: Array<{ url: string; method: string; postData?: string | null }> = []
 
@@ -169,10 +165,7 @@ test.describe("Форма зворотнього зв'язку (Отримати
 				expect(body).toContain(email)
 			}
 		}
-
-		// Переконуємось, що після успішної відправки користувач бачить повідомлення про успіх.
 		await page.waitForTimeout(300)
-		// Даємо трохи більше часу на появу спливного повідомлення.
 		const start = Date.now()
 		let ok = false
 		while (Date.now() - start < 3000) {
@@ -184,9 +177,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		}
 		expect(ok).toBeTruthy()
 	})
-
-	// --- Додаткові тести за вашим чек-листом (TC-1..TC-24) ---
-	// TC-1: Наявність всіх елементів форми
 	test("[TC-1] Наявність всіх елементів форми зворотнього зв'язку", async ({ page }: { page: Page }) => {
 		await allure.epic('Макет')
 		await allure.feature("Форма зворотнього зв'язку")
@@ -194,16 +184,11 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		await allure.severity('minor')
 
 		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
-		// Очікуємо щонайменше 3 поля введення та 1 багаторядкове поле.
 		const inputsCount = await page.locator('form:has(#user_name) input').count()
 		expect(inputsCount).toBeGreaterThanOrEqual(3)
 		const textareaCount = await page.locator('form:has(#user_name) textarea').count()
 		expect(textareaCount).toBeGreaterThanOrEqual(1)
-
-		// Кнопка відправки
 		expect(await formObj.submitBtn.isVisible()).toBeTruthy()
-
-		// Кнопка закриття: шукаємо кнопку у формі з текстом або символом 'х' / '×' / 'закрити'
 		const closeBtn = page
 			.locator('form:has(#user_name) button')
 			.filter({ hasText: /^(х|×|закрити)/i })
@@ -212,10 +197,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 			expect(await closeBtn.isVisible()).toBeTruthy()
 		}
 	})
-
-	// Вставлено нижче: тести за вашим точним списком у запитаному порядку
-
-	// Кейси Email (TC-6..TC-16): порівняння з таблицею лише за UI-сигналами (помилка/успіх)
 	const emailCases: Array<{
 		id: string
 		input: string
@@ -323,30 +304,19 @@ test.describe("Форма зворотнього зв'язку (Отримати
 			await test.step('Валідація email та поведінка форми', async () => {
 				const outcome = await submitAndCollect(page, formObj)
 				if (c.dataType === 'invalid') {
-					// Для невалидных данных: alert должен быть error, если success — тест падает
 					expect(
 						outcome.alert?.type,
-						`[${c.id}] Для невалидных данных alert должен быть 'error', а не '${outcome.alert?.type || 'none'}'`,
+						`[${c.id}] Для невалідних даних alert має бути 'error', а не '${outcome.alert?.type || 'none'}'`,
 					).toBe('error')
 				} else {
-					// Для валидных данных: alert должен быть success
 					expect(
 						outcome.alert?.type,
-						`[${c.id}] Для валидных данных alert должен быть 'success', а не '${outcome.alert?.type || 'none'}'`,
+						`[${c.id}] Для валідних даних alert має бути 'success', а не '${outcome.alert?.type || 'none'}'`,
 					).toBe('success')
 				}
 			})
 		})
 	}
-
-	// TC-3..TC-5: Повертаємось до ПІБ-кейсів
-	// [TC-3] вже є вище як перевірка заборонених символів
-
-	// TC-4/TC-5 — переміщено в кінець списку (див. після TC-24)
-
-	// TC-17..TC-20: Телефон
-
-	// TC-17: Телефон — нецифрові символи
 	test("[TC-17] Телефон: нецифрові символи у полі Телефон у формі зворотнього зв'язку", async ({
 		page,
 	}: {
@@ -363,12 +333,9 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		const phoneFieldValue = await formObj.phone.inputValue()
 		const typedDigits = inputPhone.replace(/\D/g, '')
 		const fieldDigits = phoneFieldValue.replace(/\D/g, '')
-
-		// Якщо UI змінив введення: падаємо лише коли користувач ввів більше дозволеного і відбулася відправка + успіх.
 		if (typedDigits !== fieldDigits) {
 			const expectedLen = 12
 			if (typedDigits.length > expectedLen) {
-				// Пробуємо відправити — тест падає лише якщо реально пішов запит і показано повідомлення про успіх.
 				;(page as any)._capturedRequests()!.length = 0
 				await formObj.submit()
 				await page.waitForTimeout(800)
@@ -378,16 +345,13 @@ test.describe("Форма зворотнього зв'язку (Отримати
 					throw new Error(
 						`[TC-17] UI прийняв забагато цифр і відправив форму (введено=${typedDigits}, у полі=${fieldDigits})`,
 					)
-				// Інакше дозволяємо нормалізацію/обрізку — продовжуємо стандартні перевірки.
 			}
 		}
 
 		const res = await formObj.checkValidity()
 		if (!res.submitEnabled) {
 			expect(res.submitEnabled).toBeFalsy()
-			// Натискаємо кнопку відправки (force), щоб проявити тимчасове повідомлення клієнтської валідації.
 			await formObj.submitBtn.click({ force: true })
-			// Чекаємо появу будь-якого повідомлення валідації (короткий таймаут).
 			let phoneValidationVisible = false
 			const waitForPhoneMsg = async (selector: string, t = 800) => {
 				try {
@@ -416,7 +380,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 				.catch(() => '')
 			if (phoneNativeValidation && phoneNativeValidation.length) phoneValidationVisible = true
 			expect(phoneValidationVisible).toBeTruthy()
-			// Переконуємось, що POST не відправлено (джерело істини — перехоплені запити).
 			await page.waitForTimeout(500)
 			expect(((page as any)._capturedRequests() || []).length).toBe(0)
 		} else {
@@ -426,12 +389,9 @@ test.describe("Форма зворотнього зв'язку (Отримати
 			const captured = (page as any)._capturedRequests() || []
 			const successAfter = await hasSuccessMessage(page)
 			if (captured.length > 0) {
-				// Якщо для невалідного телефону відправився запит — це відхилення від ручної таблиці.
 				throw new Error('[TC-17] Для невалідного телефону відправився POST запит')
 			}
 			expect(successAfter).toBeFalsy()
-
-			// Переконуємось, що немає повідомлення про помилку телефону, якщо відправка пройшла без блокування.
 			expect(
 				(await page
 					.locator('form:has(#user_name) >> text=/Будь ласка, введіть коректний номер телефону/i')
@@ -442,8 +402,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 			).toBeTruthy()
 		}
 	})
-
-	// TC-18: Телефон — неправильний початок
 	test("[TC-18] Телефон: неправильний початок номера (не 380) у формі зворотнього зв'язку", async ({
 		page,
 	}: {
@@ -480,7 +438,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		if (!res.submitEnabled) {
 			expect(res.submitEnabled).toBeFalsy()
 			await page.waitForTimeout(500)
-			// Джерело істини для факту відправки — перехоплені запити.
 			expect(((page as any)._capturedRequests() || []).length).toBe(0)
 		} else {
 			;(page as any)._capturedRequests()!.length = 0
@@ -500,8 +457,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 			expect(success).toBeFalsy()
 		}
 	})
-
-	// --- TC-2: Адаптивність поля для повідомлення (додано)
 	test("[TC-2] Адаптивність поля для повідомлення у формі зворотнього зв'язку", async ({ page }: { page: Page }) => {
 		await allure.epic('Макет')
 		await allure.feature("Форма зворотнього зв'язку")
@@ -527,8 +482,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
 		const inputPhone = '38099123456'
 		await formObj.fillForm({ phone: inputPhone, name: 'Тест', email: 'test@example.com', message: 'Hi' })
-
-		// Перевіряємо, що значення поля збігається з введеним (щоб виявити тихі зміни).
 		const phoneFieldValue = await formObj.phone.inputValue()
 		const typedDigits = inputPhone.replace(/\D/g, '')
 		const fieldDigits = phoneFieldValue.replace(/\D/g, '')
@@ -550,7 +503,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 
 		let res = await formObj.checkValidity()
 		expect(res.submitEnabled).toBeFalsy()
-		// Натискаємо кнопку відправки (force), щоб проявити повідомлення клієнтської валідації.
 		await formObj.submitBtn.click({ force: true })
 		let phoneValidationVisible = false
 		const waitForPhoneMsg = async (selector: string, t = 800) => {
@@ -581,7 +533,6 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		if (phoneNativeValidation && phoneNativeValidation.length) phoneValidationVisible = true
 		expect(phoneValidationVisible).toBeTruthy()
 		await page.waitForTimeout(500)
-		// Ознака відправки визначається виключно за перехоплені запити.
 		expect(((page as any)._capturedRequests() || []).length).toBe(0)
 	})
 
@@ -590,13 +541,11 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		await allure.feature("Форма зворотнього зв'язку")
 		await allure.story("[TC-20] Надмірна довжина номера у полі Телефон у формі зворотнього зв'язку")
 		await allure.severity('major')
-		;(page as any)._capturedRequests()!.length = 0 // Очищаємо перехоплені запити перед перевіркою.
+		;(page as any)._capturedRequests()!.length = 0
 		;(page as any)._capturedRequests()!.length = 0
 		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
 		const inputPhone = '3809912345612'
 		await formObj.fillForm({ phone: inputPhone, name: 'Тест', email: 'test@example.com', message: 'Hi' })
-
-		// Якщо UI тихо обрізає номер — фіксуємо це через порівняння введеного та значення в полі.
 		const phoneFieldValue = await formObj.phone.inputValue()
 		const typedDigits = inputPhone.replace(/\D/g, '')
 		const fieldDigits = phoneFieldValue.replace(/\D/g, '')
@@ -608,9 +557,7 @@ test.describe("Форма зворотнього зв'язку (Отримати
 				await formObj.submit()
 				await page.waitForTimeout(800)
 				const capturedAfter = (page as any)._capturedRequests() || []
-				// Для факту відправки покладаємось на перехоплені запити, а не на текст сторінки.
 				if (capturedAfter.length > 0) {
-					// Ручна таблиця очікує успішний результат; фіксуємо діагностику без падіння тут.
 					console.warn(
 						`[TC-20] Виявлено відправку для надмірної довжини телефону (введено=${typedDigits}, у полі=${fieldDigits})`,
 					)
@@ -621,9 +568,7 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		let res = await formObj.checkValidity()
 		expect(res.submitEnabled).toBeFalsy()
 		await page.waitForTimeout(500)
-		// Згідно ручної таблиці: тимчасові спливні повідомлення не вважаємо блокером у цій перевірці.
 	})
-	// [TC-21] Повідомлення — нижня границя (9) — помилка
 	test("[TC-21] Недостатня кількість символів у багаторядковому полі Повідомлення у формі зворотнього зв'язку", async ({
 		page,
 	}: {
@@ -646,11 +591,9 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		const outcome = await submitAndCollect(page, formObj)
 		expect(
 			outcome.alert?.type,
-			'[TC-21] Для невалидных данных alert должен быть "error", а не "' + (outcome.alert?.type || 'none') + '"',
+			'[TC-21] Для невалідних даних alert має бути "error", а не "' + (outcome.alert?.type || 'none') + '"',
 		).toBe('error')
 	})
-
-	// [TC-22] Повідомлення — верхня границя (2000) — валідно
 	test("[TC-22] Верхня границя кількості символів Повідомлення у формі зворотнього зв'язку", async ({
 		page,
 	}: {
@@ -671,11 +614,9 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		const outcome = await submitAndCollect(page, formObj)
 		expect(
 			outcome.alert?.type,
-			'[TC-22] Для валидных данных alert должен быть "success", а не "' + (outcome.alert?.type || 'none') + '"',
+			'[TC-22] Для валідних даних alert має бути "success", а не "' + (outcome.alert?.type || 'none') + '"',
 		).toBe('success')
 	})
-
-	// [TC-23] Повідомлення — верхня границя +1 (2001) — помилка
 	test("[TC-23] Надмірна кількість символів у полі Повідомлення у формі зворотнього зв'язку", async ({
 		page,
 	}: {
@@ -696,10 +637,9 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		const outcome = await submitAndCollect(page, formObj)
 		expect(
 			outcome.alert?.type,
-			'[TC-23] Для невалидных данных alert должен быть "error", а не "' + (outcome.alert?.type || 'none') + '"',
+			'[TC-23] Для невалідних даних alert має бути "error", а не "' + (outcome.alert?.type || 'none') + '"',
 		).toBe('error')
 	})
-	// [TC-24] Відправка порожньої форми для зворотнього зв'язку
 	test("[TC-24] Відправка порожньої форми для зворотнього зв'язку", async ({ page }: { page: Page }) => {
 		await allure.epic('Контактна форма')
 		await allure.feature("Форма зворотнього зв'язку")
@@ -707,22 +647,16 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		await allure.severity('critical')
 
 		const formObj: ConsultationForm = (page as any)._consultationForm as ConsultationForm
-
-		// 1) Усі поля порожні.
 		await formObj.fillForm({ name: '', email: '', phone: '', message: '' })
 		;(page as any)._capturedRequests()!.length = 0
 		await formObj.submit()
 		await page.waitForTimeout(800)
 		const captured = (page as any)._capturedRequests() || []
-		// Якщо порожня форма відправила POST — це помилка (джерело істини: перехоплені запити).
 		if (captured.length > 0) {
 			throw new Error('[TC-24] Порожня форма відправила POST запит')
 		}
 		expect(captured.length).toBe(0)
 	})
-
-
-	// TC-3: Введення заборонених символів у полі ПІБ
 	test("[TC-3] Введення заборонених символів в полі ПІБ у формі зворотнього зв'язку", async ({
 		page,
 	}: {
@@ -742,11 +676,9 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		const outcome = await submitAndCollect(page, formObj)
 		expect(
 			outcome.alert?.type,
-			'[TC-3] Для невалидных данных alert должен быть "error", а не "' + (outcome.alert?.type || 'none') + '"',
+			'[TC-3] Для невалідних даних alert має бути "error", а не "' + (outcome.alert?.type || 'none') + '"',
 		).toBe('error')
 	})
-
-	// TC-4: ПІБ мінімум 1 — помилка
 	test("[TC-4] Нижня границя-1 кількості символів у полі ПІБ у формі зворотнього зв'язку", async ({
 		page,
 	}: {
@@ -766,11 +698,9 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		const outcome = await submitAndCollect(page, formObj)
 		expect(
 			outcome.alert?.type,
-			'[TC-4] Для невалидных данных alert должен быть "error", а не "' + (outcome.alert?.type || 'none') + '"',
+			'[TC-4] Для невалідних даних alert має бути "error", а не "' + (outcome.alert?.type || 'none') + '"',
 		).toBe('error')
 	})
-
-	// TC-5: ПІБ мінімум 2 — валідно
 	test("[TC-5] Нижня границя кількості символів у полі ПІБ у формі зворотнього зв'язку", async ({
 		page,
 	}: {
@@ -790,7 +720,7 @@ test.describe("Форма зворотнього зв'язку (Отримати
 		const outcome = await submitAndCollect(page, formObj)
 		expect(
 			outcome.alert?.type,
-			'[TC-5] Для валидных данных alert должен быть "success", а не "' + (outcome.alert?.type || 'none') + '"',
+			'[TC-5] Для валідних даних alert має бути "success", а не "' + (outcome.alert?.type || 'none') + '"',
 		).toBe('success')
 	})
 })
